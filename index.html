@@ -74,10 +74,15 @@
             background: var(--bg);
             color: var(--text-main);
             margin: 0;
-            padding: 28px 24px;
+            padding: 40px 20px;
             line-height: 1.6;
+            overflow: hidden;
+            /* テーブル部分だけスクロールさせるため外側は固定 */
             -webkit-font-smoothing: antialiased;
-            overflow-x: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box;
         }
 
         /* ===== Fade-in / Slide-up Animations ===== */
@@ -95,15 +100,26 @@
         ::-webkit-scrollbar-thumb { background: var(--primary); border-radius: 100px; }
         ::-webkit-scrollbar-thumb:hover { background: var(--surface-raised); }
 
-        .container { max-width: 1400px; margin: 0 auto; position: relative; z-index: 1; }
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            position: relative;
+            z-index: 1;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            min-height: 0;
+        }
 
         h1 {
             font-size: 1.75rem;
             font-weight: 700;
             letter-spacing: -0.025em;
             color: var(--text-main);
-            margin-bottom: 28px;
+            margin-bottom: 24px;
             animation: fadeSlideUp 0.7s ease-out both;
+            flex-shrink: 0;
         }
         h1 span { color: var(--primary); }
 
@@ -115,6 +131,7 @@
             margin-bottom: 20px;
             align-items: center;
             animation: fadeSlideUp 0.7s 0.15s ease-out both;
+            flex-shrink: 0;
         }
 
         .tabs { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -196,14 +213,22 @@
         }
 
         /* ===== Table ===== */
+        #main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            overflow: hidden;
+        }
         .table-wrapper {
             border: 1px solid var(--border);
             border-radius: var(--radius);
-            overflow: hidden;
-            overflow-y: auto;
-            max-height: 80vh;
             background: var(--surface-card);
             animation: fadeSlideUp 0.7s 0.3s ease-out both;
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: auto;
+            min-height: 0;
         }
         table { width: 100%; border-collapse: collapse; min-width: 900px; text-align: left; table-layout: fixed; }
 
@@ -334,13 +359,15 @@
         }
         /* Footer */
         .footer {
-            margin-top: 40px;
+            margin-top: 0;
             text-align: center;
             font-size: 0.85rem;
             color: var(--text-sub);
             opacity: 0.8;
-            padding-bottom: 20px;
+            padding: 30px 20px;
             animation: fadeSlideUp 0.7s 0.3s ease-out both;
+            flex-shrink: 0;
+            border-top: 1px solid var(--border);
         }
         .footer a {
             color: var(--primary);
@@ -375,13 +402,14 @@
                 <thead><tr id="table-head"></tr></thead>
                 <tbody id="table-body"></tbody>
             </table>
+            
+            <div class="footer" id="footer" style="display:none;">
+                This app uses code from Morphe. <br>
+                To learn more, visit <a href="https://morphe.software" target="_blank" rel="noopener noreferrer">https://morphe.software</a>
+            </div>
         </div>
     </div>
     
-    <div class="footer" id="footer" style="display:none;">
-        This app uses code from Morphe. <br>
-        To learn more, visit <a href="https://morphe.software" target="_blank" rel="noopener noreferrer">https://morphe.software</a>
-    </div>
 </div>
 
 <script>
@@ -472,7 +500,7 @@
                 renderSheet(workbook.SheetNames[0]);
                 
                 document.getElementById('loading').style.display = 'none';
-                document.getElementById('main-content').style.display = 'block';
+                document.getElementById('main-content').style.display = 'flex';
                 document.getElementById('footer').style.display = 'block';
                 return;
             } catch (err) {
