@@ -41,8 +41,7 @@ PATCH_URLS = {
 
 # 【ホワイトリスト】翻訳を絶対に更新したくないパッチ名（小文字で指定）
 WHITELIST = [
-    "change installer package name",
-    "alternative thumbnails",
+    "change package name",
     "add more double tap to seek length options",
 ]
 
