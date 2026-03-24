@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>YouTube Patch Explorer</title>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&display=swap" rel="stylesheet">
+    <style>
+        /* ===== ReVanced-inspired Design System ===== */
+        :root {
+            --hue: 206;
+
+            /* Primary accent — ReVanced light blue */
+            --primary: hsl(var(--hue), 100%, 81%);          /* #9FD5FF */
+            --primary-dim: hsla(var(--hue), 100%, 81%, 0.15);
+            --secondary: hsl(calc(var(--hue) + 2), 75%, 82%);
+
+            /* Surfaces — dark layered backgrounds */
+            --bg: hsl(calc(var(--hue) + 46), 10%, 11%);           /* ~#1a1b1e */
+            --surface-card: hsl(calc(var(--hue) + 34), 9%, 13.5%);/* ~#202127 */
+            --surface-hover: hsl(calc(var(--hue) + 4), 14%, 17%); /* ~#272b31 */
+            --surface-raised: hsl(calc(var(--hue) + 15), 17%, 26%);/* ~#37404d */
+            --nav-bg: #1f1f26;
+
+            /* Text */
+            --text-main: hsl(var(--hue), 100%, 94%);        /* near-white blue */
+            --text-sub: hsl(calc(var(--hue) + 2), 30%, 75%);/* muted blue-gray */
+            --text-heading: var(--primary);
+
+            /* Borders */
+            --border: hsl(calc(var(--hue) + 15), 17%, 26%);
+
+            /* Status */
+            --green: #4ade80;
+            --red: #ef4d96;
+            --no-color: hsla(340, 82%, 62%, 0.35);
+
+            /* Misc */
+            --radius: 12px;
+            --radius-pill: 24px;
+            --transition: 0.3s ease-out;
+            --td-border: hsla(calc(var(--hue) + 15), 17%, 26%, 0.5);
+        }
+
+        /* ===== Light Theme Overrides ===== */
+        body.light-theme {
+            --bg: #f8fafc;
+            --surface-card: #ffffff;
+            --surface-hover: #f1f5f9;
+            --surface-raised: #e2e8f0;
+            --nav-bg: #f8fafc;
+            
+            --border: #e2e8f0;
+            --td-border: #e2e8f0;
+
+            --primary: hsl(206, 85%, 45%); /* 同系色の水色（白背景で見えるよう濃いめ） */
+            --primary-dim: hsla(206, 85%, 45%, 0.1);
+            --secondary: hsl(206, 75%, 55%);
+
+            --text-main: #0f172a;
+            --text-sub: #475569;
+
+            --green: #16a34a;
+            --no-color: hsla(340, 82%, 50%, 0.4);
+        }
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-optical-sizing: auto;
+            background: var(--bg);
+            color: var(--text-main);
+            margin: 0;
+            padding: 28px 24px;
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+            overflow-x: hidden;
+        }
+
+        /* ===== Fade-in / Slide-up Animations ===== */
+        @keyframes fadeSlideUp {
+            from { opacity: 0; transform: translateY(24px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to   { opacity: 1; }
+        }
+
+        /* Scrollbar — ReVanced style */
+        ::-webkit-scrollbar { width: 6px; height: 6px; background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--primary); border-radius: 100px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--surface-raised); }
+
+        .container { max-width: 1400px; margin: 0 auto; position: relative; z-index: 1; }
+
+        h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            letter-spacing: -0.025em;
+            color: var(--text-main);
+            margin-bottom: 28px;
+            animation: fadeSlideUp 0.7s ease-out both;
+        }
+        h1 span { color: var(--primary); }
+
+        /* ===== Controls ===== */
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+            align-items: center;
+            animation: fadeSlideUp 0.7s 0.15s ease-out both;
+        }
+
+        .tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+
+        /* Pill tab buttons */
+        .tab-btn {
+            padding: 8px 18px;
+            border: 1px solid var(--border);
+            background: transparent;
+            color: var(--text-sub);
+            cursor: pointer;
+            border-radius: var(--radius-pill);
+            font-family: inherit;
+            font-size: 0.85rem;
+            font-weight: 500;
+            letter-spacing: 0.02em;
+            transition: background var(--transition), color var(--transition), border-color var(--transition), box-shadow var(--transition);
+        }
+        .tab-btn.active {
+            background: var(--primary-dim);
+            color: var(--primary);
+            border-color: transparent;
+            font-weight: 600;
+        }
+        .tab-btn:hover:not(.active) {
+            background: var(--surface-hover);
+            color: var(--text-main);
+            transform: translateY(-1px);
+        }
+
+        /* Search */
+        #search-input {
+            flex-grow: 1;
+            min-width: 180px;
+            padding: 10px 20px;
+            border-radius: var(--radius-pill);
+            border: 1px solid var(--border);
+            background: transparent;
+            color: var(--text-main);
+            font-family: inherit;
+            font-size: 0.9rem;
+            outline: none;
+            transition: border-color var(--transition), box-shadow var(--transition);
+        }
+        #search-input::placeholder { color: var(--text-sub); opacity: 0.6; }
+        #search-input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px var(--primary-dim);
+        }
+        
+        div.search-wrapper { flex: 1; min-width: 200px; display: flex; }
+        
+        #toggle-en-btn { padding: 8px 18px; }
+        #theme-toggle-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 38px;
+            height: 38px;
+            padding: 0;
+            flex-shrink: 0;
+        }
+        #toggle-en-btn, #theme-toggle-btn {
+            border: 1px solid var(--border);
+            background: transparent;
+            color: var(--text-sub);
+            cursor: pointer;
+            border-radius: var(--radius-pill);
+            font-family: inherit;
+            font-size: 0.85rem;
+            font-weight: 500;
+            transition: background var(--transition), color var(--transition), border-color var(--transition), transform var(--transition), box-shadow var(--transition);
+        }
+        #toggle-en-btn:hover, #theme-toggle-btn:hover { background: var(--surface-hover); color: var(--text-main); transform: translateY(-1px); }
+        #toggle-en-btn.active {
+            background: var(--primary-dim);
+            color: var(--primary);
+            border-color: transparent;
+        }
+
+        /* ===== Table ===== */
+        .table-wrapper {
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+            overflow-y: auto;
+            max-height: 80vh;
+            background: var(--surface-card);
+            animation: fadeSlideUp 0.7s 0.3s ease-out both;
+        }
+        table { width: 100%; border-collapse: collapse; min-width: 900px; text-align: left; table-layout: fixed; }
+
+        /* 列幅のトランジション: 行のフェードアウト最大時間（遅延0.4s + アニメ0.3s = 0.7s）に合わせる */
+        col { transition: width 0.7s ease-out; }
+
+        /* 列幅の配分 — 原文非表示時 (または非表示アニメーション中) */
+        .hide-en-col col.col-name, .closing-en-col col.col-name  { width: 28%; }
+        .hide-en-col col.col-check, .closing-en-col col.col-check { width: 9%; }
+        .hide-en-col col.col-desc, .closing-en-col col.col-desc  { width: 45%; }
+        .closing-en-col col.col-en, .hide-en-col col.col-en { width: 0%; } /* スムーズに0へ */
+
+        /* 列幅の配分 — 原文表示時 */
+        col.col-name  { width: 18%; }
+        col.col-check { width: 7%; }
+        col.col-desc  { width: 31%; }
+        col.col-en    { width: 30%; }
+
+        th {
+            background: var(--nav-bg);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            color: var(--text-sub);
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        td {
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--td-border);
+            font-size: 0.875rem;
+            vertical-align: top;
+            transition: background var(--transition), padding 0.7s ease-out;
+        }
+        tr:hover td { background: var(--surface-hover); }
+        tr:last-child td { border-bottom: none; }
+
+        /* Status markers */
+        .check { font-weight: 700; font-size: 1.1em; text-align: center; white-space: nowrap; vertical-align: middle; }
+        tr.has-note .check { vertical-align: top; }
+        .yes { color: var(--green); }
+        .no { color: var(--no-color); }
+
+        /* Annotations */
+        .annotation {
+            display: block;
+            margin-top: 6px;
+            font-size: 0.75rem;
+            color: var(--text-sub);
+            font-weight: 400;
+            line-height: 1.4;
+            opacity: 0.8;
+            white-space: normal;
+            word-break: keep-all;
+            overflow-wrap: break-word;
+        }
+
+        /* English column */
+        .desc-en-inner { color: var(--text-sub); font-style: italic; opacity: 0.75; min-width: 250px; }
+        
+        td.col-en, th.col-en { overflow: hidden; transition: padding 0.7s ease-out, background var(--transition); }
+        .hide-en-col .col-en { display: none; }
+        
+        /* 閉じるアニメーション時・非表示時はpaddingごと0にして完全に幅をなくす */
+        .closing-en-col .col-en, .hide-en-col .col-en {
+            padding-left: 0;
+            padding-right: 0;
+        }
+
+        /* 原文非表示時はヘッダー折り返し禁止 */
+        .hide-en-col th, .closing-en-col th { white-space: nowrap; }
+
+        /* 原文表示アニメーション */
+        @keyframes colEnFadeIn {
+            from { opacity: 0; transform: translateX(16px); }
+            to   { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes colEnFadeOut {
+            from { opacity: 1; transform: translateX(0); }
+            to   { opacity: 0; transform: translateX(16px); }
+        }
+        .col-en.animate-in {
+            animation: colEnFadeIn 0.4s ease-out both;
+        }
+        .col-en.animate-out {
+            animation: colEnFadeOut 0.3s ease-in both;
+        }
+
+        /* Loading */
+        #loading {
+            text-align: center;
+            padding: 60px 20px;
+            font-size: 1rem;
+            color: var(--text-sub);
+        }
+        #loading::after {
+            content: "";
+            display: block;
+            width: 36px; height: 36px;
+            margin: 20px auto 0;
+            border: 3px solid transparent;
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ===== Row stagger animation ===== */
+        @keyframes rowFadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        tbody tr {
+            animation: rowFadeIn 0.35s ease-out both;
+        }
+
+        /* ===== Responsive ===== */
+        @media (max-width: 768px) {
+            body { padding: 16px 12px; }
+            h1 { font-size: 1.4rem; margin-bottom: 20px; }
+            .controls { gap: 8px; }
+            .tab-btn, #toggle-en-btn { font-size: 0.8rem; padding: 6px 14px; }
+        }
+        /* Footer */
+        .footer {
+            margin-top: 40px;
+            text-align: center;
+            font-size: 0.85rem;
+            color: var(--text-sub);
+            opacity: 0.8;
+            padding-bottom: 20px;
+            animation: fadeSlideUp 0.7s 0.3s ease-out both;
+        }
+        .footer a {
+            color: var(--primary);
+            text-decoration: none;
+            transition: color var(--transition);
+        }
+        .footer a:hover {
+            color: var(--secondary);
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>YouTube Patch <span>Explorer</span></h1>
+    
+    <div id="loading">Excelデータを読み込み中...</div>
+
+    <div id="main-content" style="display:none;">
+        <div class="controls">
+            <div class="tabs" id="tab-container"></div>
+            <div class="search-wrapper">
+                <input type="text" id="search-input" placeholder="パッチ名や機能で検索..." />
+            </div>
+            <button id="theme-toggle-btn" title="テーマ切り替え"></button>
+            <button id="toggle-en-btn">原文(English)を表示</button>
+        </div>
+        
+        <div class="table-wrapper hide-en-col" id="table-wrapper">
+            <table id="patch-table">
+                <thead><tr id="table-head"></tr></thead>
+                <tbody id="table-body"></tbody>
+            </table>
+        </div>
+    </div>
+    
+    <div class="footer" id="footer" style="display:none;">
+        This app uses code from Morphe. <br>
+        To learn more, visit <a href="https://morphe.software" target="_blank" rel="noopener noreferrer">https://morphe.software</a>
+    </div>
+</div>
+
+<script>
+    // JavaScriptは最も安定して動いていた「シンプル版（※改行対応・英語トグル完璧動作）」をそのまま使用
+    let workbook = null;
+    let currentData = [];
+    let showEnglish = false;
+
+    // SVG Icons for Theme Toggle (Lucide)
+    const SUN_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="2" x2="12" y2="4"></line><line x1="12" y1="20" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="6.34" y2="6.34"></line><line x1="17.66" y1="17.66" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="4" y2="12"></line><line x1="20" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="6.34" y2="17.66"></line><line x1="17.66" y1="6.34" x2="19.07" y2="4.93"></line></svg>`;
+    const MOON_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>`;
+
+    // テーマ切り替え設定
+    const themeBtn = document.getElementById('theme-toggle-btn');
+    if (localStorage.getItem('theme') === 'light') {
+        document.body.classList.add('light-theme');
+        themeBtn.innerHTML = MOON_ICON;
+    } else {
+        themeBtn.innerHTML = SUN_ICON;
+    }
+    themeBtn.addEventListener('click', () => {
+        document.body.classList.toggle('light-theme');
+        if (document.body.classList.contains('light-theme')) {
+            localStorage.setItem('theme', 'light');
+            themeBtn.innerHTML = MOON_ICON;
+        } else {
+            localStorage.setItem('theme', 'dark');
+            themeBtn.innerHTML = SUN_ICON;
+        }
+    });
+
+    document.getElementById('toggle-en-btn').addEventListener('click', (e) => {
+        showEnglish = !showEnglish;
+        const wrapper = document.getElementById('table-wrapper');
+        if (showEnglish) {
+            wrapper.classList.remove('hide-en-col', 'closing-en-col');
+            wrapper.classList.add('opening-en-col');
+            e.target.classList.add('active');
+            e.target.innerText = "原文(English)を隠す";
+            // 英語列にフェードインアニメーション
+            document.querySelectorAll('.col-en').forEach((el, i) => {
+                el.classList.remove('animate-out', 'animate-in');
+                void el.offsetWidth; // reflow
+                el.style.animationDelay = `${Math.min(i * 0.02, 0.4)}s`;
+                el.classList.add('animate-in');
+            });
+            // アニメーション完了後にopeningクラスを外して折り返しを許可
+            setTimeout(() => {
+                wrapper.classList.remove('opening-en-col');
+            }, 700);
+        } else {
+            // 閉じるアニメーション用のクラスを付与し、幅のトランジションを開始
+            wrapper.classList.remove('opening-en-col');
+            wrapper.classList.add('closing-en-col');
+
+            // 英語列にフェードアウトアニメーション
+            const enCols = document.querySelectorAll('.col-en');
+            enCols.forEach((el, i) => {
+                el.classList.remove('animate-in');
+                void el.offsetWidth;
+                el.style.animationDelay = `${Math.min(i * 0.02, 0.4)}s`;
+                el.classList.add('animate-out');
+            });
+            
+            // ボタンの表示はすぐに切り替え
+            e.target.classList.remove('active');
+            e.target.innerText = "原文(English)を表示";
+
+            // アニメーション完了後（列幅のtransitionと完了タイミングを合わせる）に完全に非表示化
+            setTimeout(() => {
+                wrapper.classList.remove('closing-en-col');
+                wrapper.classList.add('hide-en-col');
+                enCols.forEach(el => el.classList.remove('animate-out'));
+            }, 700);
+        }
+    });
+
+    async function loadExcel() {
+        const files = ['Patch_Comparison_All.xlsx', 'Patch_Comparison_12B_Quality.xlsx'];
+        for (const file of files) {
+            try {
+                const response = await fetch(file);
+                if (!response.ok) continue;
+                const arrayBuffer = await response.arrayBuffer();
+                workbook = XLSX.read(arrayBuffer);
+                
+                setupTabs();
+                renderSheet(workbook.SheetNames[0]);
+                
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('main-content').style.display = 'block';
+                document.getElementById('footer').style.display = 'block';
+                return;
+            } catch (err) {
+                console.warn(`${file} の読み込みに失敗:`, err);
+            }
+        }
+        document.getElementById('loading').innerText = "エラー: Excelファイルを読み込めませんでした。";
+    }
+
+    function setupTabs() {
+        const container = document.getElementById('tab-container');
+        container.innerHTML = '';
+        workbook.SheetNames.forEach((name, idx) => {
+            const btn = document.createElement('button');
+            btn.className = `tab-btn ${idx === 0 ? 'active' : ''}`;
+            btn.innerText = name;
+            btn.onclick = () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                renderSheet(name);
+                // 切り替えた時にテーブルを一番上までスクロール
+                document.getElementById('table-wrapper').scrollTop = 0;
+            };
+            container.appendChild(btn);
+        });
+    }
+
+    function renderSheet(sheetName) {
+        const worksheet = workbook.Sheets[sheetName];
+        const json = XLSX.utils.sheet_to_json(worksheet, {header: 1});
+        
+        const head = json[0] || [];
+        currentData = json.slice(1);
+        
+        // colgroup を動的に生成して列幅を固定
+        const table = document.getElementById('patch-table');
+        let colgroup = table.querySelector('colgroup');
+        if (colgroup) colgroup.remove();
+        colgroup = document.createElement('colgroup');
+        head.forEach((h, idx) => {
+            const col = document.createElement('col');
+            if (idx === 0) col.className = 'col-name';
+            else if (idx >= 1 && idx <= 3) col.className = 'col-check';
+            else if (idx === 5) col.className = 'col-en';
+            else col.className = 'col-desc';
+            colgroup.appendChild(col);
+        });
+        table.prepend(colgroup);
+
+        const headRow = document.getElementById('table-head');
+        headRow.innerHTML = head.map((h, idx) => {
+            return `<th class="${idx === 5 ? 'col-en' : ''}">${h}</th>`;
+        }).join('');
+        
+        displayData(currentData);
+    }
+
+    function displayData(data) {
+        const body = document.getElementById('table-body');
+        body.innerHTML = data.map((row, index) => {
+            // 行内に「※」が含まれているか判定
+            const hasNote = row.some(cell => typeof cell === 'string' && cell.includes('※'));
+            return `<tr${hasNote ? ' class="has-note"' : ''}>${row.map((cell, idx) => {
+                let cellContent = cell !== undefined ? String(cell) : '';
+                
+                // 「(」の前で改行されないように nowrap で囲む
+                cellContent = cellContent.replace(/(\S+)\(/g, '<span style="white-space:nowrap">$1(</span>');
+
+                // プロジェクトの列 (ReVanced, Morphe, anddea)
+                if (idx >= 1 && idx <= 3) {
+                    if (cellContent === "〇") return `<td class="check yes">〇</td>`;
+                    if (cellContent === "-") return `<td class="check no">-</td>`;
+                    
+                    // 「※」が含まれる場合に改行してスタイル適用
+                    if (cellContent.includes('※')) {
+                        const parts = cellContent.split('※');
+                        const mainPart = parts[0].trim();
+                        const notePart = '※' + parts.slice(1).join('※').trim();
+                        const isYes = mainPart.includes('〇');
+                        const statusClass = isYes ? 'yes' : (mainPart.includes('-') ? 'no' : '');
+                        return `<td class="check ${statusClass} with-note">${mainPart}<span class="annotation">${notePart}</span></td>`;
+                    }
+                    return `<td class="check">${cellContent}</td>`;
+                }
+                
+                // 英語の原文列
+                if (idx === 5) return `<td class="col-en"><div class="desc-en-inner">${cellContent}</div></td>`;
+                
+                // その他の列
+                return `<td>${cellContent}</td>`;
+            }).join('')}</tr>`;
+        }).join('');
+
+        // スタガードアニメーション遅延を適用
+        const rows = body.querySelectorAll('tr');
+        rows.forEach((row, i) => {
+            row.style.animationDelay = `${Math.min(i * 0.03, 0.9)}s`;
+        });
+    }
+
+    document.getElementById('search-input').addEventListener('input', (e) => {
+        const term = e.target.value.toLowerCase();
+        const filtered = currentData.filter(row => 
+            row.some(cell => String(cell).toLowerCase().includes(term))
+        );
+        displayData(filtered);
+    });
+
+    window.onload = loadExcel;
+    
+</script>
+</body>
+</html>
