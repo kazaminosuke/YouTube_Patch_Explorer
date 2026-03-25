@@ -3,20 +3,15 @@ import os
 import requests
 import pandas as pd
 import time
+from config import * # 👈 新しく作ったconfig.pyから設定を全部読み込む！
 
-# --- 新規：Geminiライブラリの読み込み ---
 try:
     import google.generativeai as genai
     HAS_GEMINI = True
 except ImportError:
     HAS_GEMINI = False
 
-# --- 設定 ---
-OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL_NAME = "translategemma:12b"
-EXCEL_FILE = 'Patch_Comparison_All.xlsx'
-
-# 👇 Gemini APIのセットアップ（APIキーがあれば自動でGeminiモードになる）
+# Gemini APIのセットアップ
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 USE_GEMINI = False
 
@@ -31,43 +26,25 @@ if GEMINI_API_KEY and HAS_GEMINI:
 else:
     print("🖥️ [起動モード] Ollamaモード (ローカル翻訳)")
 
-
-# 【自動更新】各パッチリストの取得元URL（Raw URL）
-PATCH_URLS = {
-    'revanced-dev-patches-list.json': 'https://raw.githubusercontent.com/Jman-Github/ReVanced-Patch-Bundles/refs/heads/bundles/patch-bundles/revanced-patch-bundles/revanced-dev-patches-list.json', 
-    'MorpheApp-patches-list.json': 'https://raw.githubusercontent.com/MorpheApp/morphe-patches/refs/heads/dev/patches-list.json', 
-    'andda-patches-list.json': 'https://raw.githubusercontent.com/anddea/revanced-patches/refs/heads/dev/patches-list.json' 
-}
-
-# 【ホワイトリスト】翻訳を絶対に更新したくないパッチ名（小文字で指定）
-WHITELIST = [
-    "change package name",
-    "add more double tap to seek length options",
-]
-
-# 【エイリアスマップ】完全に同じ機能だが、プロジェクト間で名前が違うものを結合
-ALIAS_MAP = {
-    "hook download actions": "downloads",
-}
-
-# 【新規】表の記号（〇や-）を上書きして注釈をつけるマップ
-CUSTOM_MARKS = {
-    "video ads": {"anddea": "〇 ※Hide adsに統合"},
-    "video quality": {"anddea": "〇 ※Video playbackに統合"},
-    "playback speed": {"anddea": "〇 ※Video playbackに統合"},
-    "hide shorts components": {"anddea": "〇 ※Shorts componentsに統合"}
-}
-
 def normalize_name(name):
     clean_name = name.lower().strip()
     return ALIAS_MAP.get(clean_name, clean_name)
 
-# 👇 翻訳関数（GeminiとOllamaを自動で切り替え ＆ 「。」削除機能付き）
 def translate_text(text, is_name=False):
     if not text or text == "-" or len(text) < 2:
         return text
     
-    prompt = f"""You are a professional translator. Translate the English text to natural, polite Japanese (Desu/Masu form). 
+    if is_name:
+        prompt = f"""You are a professional translator. Translate the English patch name to a concise Japanese noun phrase. 
+Do NOT translate it as a full sentence. Do NOT use "Desu/Masu" or "しました". Output ONLY the translated Japanese text.
+
+English: Hide shorts components
+Japanese: ショート動画コンポーネントの非表示
+
+English: {text}
+Japanese:"""
+    else:
+        prompt = f"""You are a professional translator. Translate the English text to natural, polite Japanese (Desu/Masu form). 
 Output ONLY the translated Japanese text. Do not add any greetings, explanations, alternative options, or English words.
 
 English: Hide shorts components
@@ -76,17 +53,14 @@ Japanese: ショート動画のコンポーネントを非表示にします。
 English: {text}
 Japanese:"""
 
-    translated = text # 初期値
+    translated = text
 
-    # 【分岐A】Gemini APIを使う場合
     if USE_GEMINI:
         try:
             response = gemini_model.generate_content(prompt)
             translated = response.text.strip()
         except Exception as e:
             return text
-
-    # 【分岐B】ローカルのOllamaを使う場合
     else:
         for attempt in range(3):
             try:
@@ -94,20 +68,15 @@ Japanese:"""
                     "model": MODEL_NAME, "prompt": prompt, "stream": False,
                     "options": {"temperature": 0.1, "num_predict": 256, "top_p": 0.9}
                 }, timeout=120) 
-                
                 result = response.json().get("response", "").strip()
                 translated = result.split('\n')[0].replace("Japanese:", "").replace("English:", "").strip()
-                break # 成功したらループを抜ける
+                break
             except Exception as e:
                 if attempt < 2: time.sleep(2)
                 else: return text
 
-    # --- 翻訳語の共通クリーンアップ処理 ---
-    # 1. 余計なダブルクォーテーションを外す
     if translated.startswith('"') and translated.endswith('"'):
         translated = translated[1:-1]
-        
-    # 2. 【追加】タイトル(is_name=True)の場合は末尾の「。」を消す！
     if is_name:
         translated = translated.rstrip('。')
 
@@ -116,8 +85,7 @@ Japanese:"""
 def download_latest_patches():
     print("\n--- 🌐 最新のパッチリストをGitHubから取得中 ---")
     for filename, url in PATCH_URLS.items():
-        if not url:
-            continue
+        if not url: continue
         try:
             print(f"[{filename}] をダウンロード中... ", end="")
             response = requests.get(url, timeout=10)
@@ -131,7 +99,6 @@ def download_latest_patches():
 def load_translation_memory(file_path):
     memory = {}
     if not os.path.exists(file_path): return memory
-    
     print(f"\n過去の翻訳データ ({file_path}) を読み込んでいます...")
     try:
         xls = pd.ExcelFile(file_path)
@@ -142,17 +109,12 @@ def load_translation_memory(file_path):
                     combo_name = str(row["パッチ名 (EN / JA)"])
                     desc_en = str(row["説明 (原文)"])
                     desc_ja = str(row["説明 (日本語)"])
-                    
-                    if " / " in combo_name:
-                        orig_name, name_ja = combo_name.split(" / ", 1)
-                    else:
-                        orig_name, name_ja = combo_name, combo_name
-                        
+                    orig_name, name_ja = combo_name.split(" / ", 1) if " / " in combo_name else (combo_name, combo_name)
                     norm_key = normalize_name(orig_name.split(" | ")[0])
                     memory[norm_key] = {"name_ja": name_ja, "desc_ja": desc_ja, "desc_en": desc_en}
         print(f"{len(memory)} 件の翻訳メモリをロードしました。")
     except Exception as e:
-        print(f"翻訳メモリの読み込みに失敗しました: {e}")
+        print(f"翻訳メモリの読み込みに失敗: {e}")
     return memory
 
 def get_patches(filename, target_type):
@@ -167,7 +129,6 @@ def get_patches(filename, target_type):
                 desc = p.get('description', '') or ""
                 desc = desc.replace("\n", " ").replace("\r", "")
                 compat = p.get('compatiblePackages')
-                
                 is_target = False
                 if target_type == 'universal':
                     if not compat: is_target = True
@@ -192,7 +153,6 @@ def get_sheet_data(category_name, target_type, files, trans_memory):
 
     for i, norm_key in enumerate(all_keys, 1):
         original_names, desc_en = set(), ""
-        
         for p_dict in [rev_p, mor_p, and_p]:
             if norm_key in p_dict:
                 original_names.add(p_dict[norm_key]["original_name"])
@@ -211,7 +171,6 @@ def get_sheet_data(category_name, target_type, files, trans_memory):
 
         if needs_translation:
             rep_name = list(original_names)[0]
-            # 👇 ここで新しい関数名 translate_text を呼び出します
             name_ja = translate_text(rep_name, is_name=True)
             desc_ja = translate_text(desc_en)
             translate_count += 1
@@ -219,7 +178,6 @@ def get_sheet_data(category_name, target_type, files, trans_memory):
             skip_count += 1
         
         final_name_col = f"{combined_original} / {name_ja}" if name_ja and name_ja != combined_original else combined_original
-        
         rev_mark = "〇" if norm_key in rev_p else "-"
         mor_mark = "〇" if norm_key in mor_p else "-"
         and_mark = "〇" if norm_key in and_p else "-"
@@ -249,7 +207,6 @@ def main():
         if yt_data: pd.DataFrame(yt_data, columns=yt_head).to_excel(writer, sheet_name='YouTube', index=False)
         if ytm_data: pd.DataFrame(ytm_data, columns=ytm_head).to_excel(writer, sheet_name='YT Music', index=False)
         if univ_data: pd.DataFrame(univ_data, columns=univ_head).to_excel(writer, sheet_name='Universal', index=False)
-
     print("✨ 更新が完了しました！")
 
 if __name__ == "__main__":
