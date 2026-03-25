@@ -230,6 +230,10 @@
             overflow-x: auto;
             min-height: 0;
         }
+        /* アニメーション中は横スクロールバーを一時的に隠す */
+        .table-wrapper.opening-en-col, .table-wrapper.closing-en-col {
+            overflow-x: hidden;
+        }
         table { width: 100%; border-collapse: collapse; min-width: 900px; text-align: left; table-layout: fixed; }
 
         /* 列幅のトランジション: 行のフェードアウト最大時間（遅延0.4s + アニメ0.3s = 0.7s）に合わせる */
@@ -292,7 +296,14 @@
         }
 
         /* English column */
-        .desc-en-inner { color: var(--text-sub); font-style: italic; opacity: 0.75; min-width: 250px; }
+        .desc-en-inner { 
+            color: var(--text-sub); 
+            font-style: italic; 
+            opacity: 0.75; 
+            /* 幅を固定して見え隠れだけさせる（アニメーション中の強制改行＝変形を防ぐ） */
+            min-width: 350px; 
+            white-space: normal;
+        }
         
         td.col-en, th.col-en { overflow: hidden; transition: padding 0.7s ease-out, background var(--transition); }
         .hide-en-col .col-en { display: none; }
@@ -303,8 +314,13 @@
             padding-right: 0;
         }
 
-        /* 原文非表示時はヘッダー折り返し禁止 */
-        .hide-en-col th, .closing-en-col th { white-space: nowrap; }
+        /* 原文非表示・アニメーション中はヘッダー折り返し禁止 */
+        .hide-en-col th, .closing-en-col th, .opening-en-col th { white-space: nowrap; }
+        
+        /* 英語の表示状態に応じて見出しの改行を切り替える */
+        .hide-en-col .optional-br { display: inline; }
+        .hide-en-col .optional-br::before { content: " "; }
+        .table-wrapper:not(.hide-en-col) .optional-br { display: block; }
 
         /* 原文表示アニメーション */
         @keyframes colEnFadeIn {
@@ -459,7 +475,7 @@
             // アニメーション完了後にopeningクラスを外して折り返しを許可
             setTimeout(() => {
                 wrapper.classList.remove('opening-en-col');
-            }, 700);
+            }, 850);
         } else {
             // 閉じるアニメーション用のクラスを付与し、幅のトランジションを開始
             wrapper.classList.remove('opening-en-col');
@@ -483,7 +499,7 @@
                 wrapper.classList.remove('closing-en-col');
                 wrapper.classList.add('hide-en-col');
                 enCols.forEach(el => el.classList.remove('animate-out'));
-            }, 700);
+            }, 850);
         }
     });
 
@@ -552,7 +568,12 @@
 
         const headRow = document.getElementById('table-head');
         headRow.innerHTML = head.map((h, idx) => {
-            return `<th class="${idx === 5 ? 'col-en' : ''}">${h}</th>`;
+            let headerText = h;
+            // ３つのプロジェクト列（ReVanced, Morphe, anddea）は、英語列表示時のみカッコの前で改行する
+            if (idx >= 1 && idx <= 3 && typeof headerText === 'string') {
+                headerText = headerText.replace(' (', '<span class="optional-br"></span>(');
+            }
+            return `<th class="${idx === 5 ? 'col-en' : ''}">${headerText}</th>`;
         }).join('');
         
         displayData(currentData);
