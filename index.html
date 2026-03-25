@@ -318,9 +318,10 @@
         .hide-en-col th, .closing-en-col th, .opening-en-col th { white-space: nowrap; }
         
         /* 英語の表示状態に応じて見出しの改行を切り替える */
-        .hide-en-col .optional-br { display: inline; }
-        .hide-en-col .optional-br::before { content: " "; }
-        .table-wrapper:not(.hide-en-col) .optional-br { display: block; }
+        .hide-en-col .optional-br, .halfway-closed .optional-br { display: inline; }
+        .hide-en-col .optional-br::before, .halfway-closed .optional-br::before { content: " "; }
+        /* 上記以外（表示中・開く途中・閉じる前半）は改行 */
+        .table-wrapper:not(.hide-en-col):not(.halfway-closed) .optional-br { display: block; }
 
         /* 原文表示アニメーション */
         @keyframes colEnFadeIn {
@@ -461,7 +462,7 @@
         showEnglish = !showEnglish;
         const wrapper = document.getElementById('table-wrapper');
         if (showEnglish) {
-            wrapper.classList.remove('hide-en-col', 'closing-en-col');
+            wrapper.classList.remove('hide-en-col', 'closing-en-col', 'halfway-closed');
             wrapper.classList.add('opening-en-col');
             e.target.classList.add('active');
             e.target.innerText = "原文(English)を隠す";
@@ -494,9 +495,16 @@
             e.target.classList.remove('active');
             e.target.innerText = "原文(English)を表示";
 
+            // 幅が十分に広がった中間時点（約0.4秒後）で改行を解除する
+            setTimeout(() => {
+                if (wrapper.classList.contains('closing-en-col')) {
+                    wrapper.classList.add('halfway-closed');
+                }
+            }, 400);
+
             // アニメーション完了後（列幅のtransitionと完了タイミングを合わせる）に完全に非表示化
             setTimeout(() => {
-                wrapper.classList.remove('closing-en-col');
+                wrapper.classList.remove('closing-en-col', 'halfway-closed');
                 wrapper.classList.add('hide-en-col');
                 enCols.forEach(el => el.classList.remove('animate-out'));
             }, 850);
